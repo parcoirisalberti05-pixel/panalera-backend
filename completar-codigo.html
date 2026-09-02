@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Completar Codigo - Pañalera Arcoiris</title>
+<style>
+body{font-family:Arial;background:#f5f5f5;padding:20px;max-width:500px;margin:0 auto}
+h1{font-size:20px;text-align:center}
+label{font-weight:bold;display:block;margin-top:12px;margin-bottom:5px}
+input{width:100%;padding:12px;font-size:16px;box-sizing:border-box;border:2px solid #ccc;border-radius:8px}
+#resultado{display:none;background:white;padding:15px;border-radius:8px;margin-top:15px}
+#nombre{font-size:18px;font-weight:bold}
+#precioActual{color:#666;margin:8px 0}
+button{width:100%;padding:15px;font-size:18px;background:#4CAF50;color:white;border:none;border-radius:8px;margin-top:15px}
+button:disabled{background:#aaa}
+#mensaje{text-align:center;margin-top:15px;font-weight:bold}
+</style>
+</head>
+<body>
+<h1>Completar Codigo de Barras</h1>
+
+<label for="busqueda">Buscar producto por nombre</label>
+<input type="text" id="busqueda" placeholder="Ej: Aceite Johnson Puro 100">
+
+<div id="resultado">
+<div id="nombre"></div>
+<div id="precioActual"></div>
+<label for="codigo">Escanear codigo de barras</label>
+<input type="text" id="codigo" placeholder="Escanear aca" autocomplete="off">
+<button id="btnGuardar">Guardar codigo</button>
+</div>
+<div id="mensaje"></div>
+
+<script>
+const API = "http://localhost:3000";
+let productoActual = null;
+const busqueda = document.getElementById("busqueda");
+const resultado = document.getElementById("resultado");
+const codigo = document.getElementById("codigo");
+const mensaje = document.getElementById("mensaje");
+
+busqueda.addEventListener("keypress", async function(e) {
+  if (e.key === "Enter") {
+    const texto = busqueda.value.trim();
+    if (!texto) return;
+    mensaje.textContent = "Buscando...";
+    const resp = await fetch(API + "/api/productos?buscar=" + encodeURIComponent(texto));
+    const datos = await resp.json();
+    if (datos.length === 0) {
+      resultado.style.display = "none";
+      mensaje.textContent = "No se encontro ningun producto";
+      productoActual = null;
+      return;
+    }
+    productoActual = datos[0];
+    document.getElementById("nombre").textContent = productoActual.nombre;
+    document.getElementById("precioActual").textContent = "Codigo actual: " + (productoActual.codigo_barras || "sin cargar");
+    resultado.style.display = "block";
+    mensaje.textContent = "";
+    codigo.value = "";
+    codigo.focus();
+  }
+});
+
+document.getElementById("btnGuardar").addEventListener("click", async function() {
+  if (!productoActual) return;
+  const codigoNuevo = codigo.value.trim();
+  if (!codigoNuevo) {
+    mensaje.textContent = "Escaneá o escribí un codigo primero";
+    return;
+  }
+  const boton = document.getElementById("btnGuardar");
+  boton.disabled = true;
+  mensaje.textContent = "Guardando...";
+
+  try {
+    const resp = await fetch(API + "/api/productos/" + productoActual.id + "/codigo-barras", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ codigo_barras: codigoNuevo })
+    });
+    const datos = await resp.json();
+    if (resp.ok) {
+      mensaje.textContent = "Codigo guardado para " + datos.nombre;
+      resultado.style.display = "none";
+      busqueda.value = "";
+      busqueda.focus();
+    } else {
+      mensaje.textContent = "Error: " + (datos.error || "no se pudo guardar");
+    }
+  } catch (err) {
+    mensaje.textContent = "Error de conexion con el servidor";
+  }
+  boton.disabled = false;
+});
+</script>
+</body>
+</html>

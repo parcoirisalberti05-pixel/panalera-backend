@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Gestión - Pañalera Arcoiris</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 500px; margin: 20px auto; padding: 0 15px; }
+  h1 { font-size: 22px; }
+  input { width: 100%; padding: 10px; font-size: 16px; margin-bottom: 10px; box-sizing: border-box; }
+  .producto { border: 1px solid #ccc; border-radius: 8px; padding: 12px; margin-bottom: 8px; cursor: pointer; }
+  .producto:hover { background: #f5f5f5; }
+  .seleccionado { border: 2px solid #2c7; background: #eafff0; padding: 15px; border-radius: 8px; margin-top: 15px; }
+  .acciones { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  button { padding: 12px; font-size: 15px; border: none; border-radius: 6px; cursor: pointer; color: white; }
+  .btn-precio { background: #2196F3; }
+  .btn-ingreso { background: #4CAF50; }
+  .btn-ajuste { background: #FF9800; }
+  .btn-devolucion { background: #9C27B0; }
+  .form-accion { display: none; margin-top: 12px; padding: 12px; background: white; border-radius: 6px; border: 1px solid #ddd; }
+  .form-accion.activo { display: block; }
+  .form-accion button { width: 100%; background: #333; margin-top: 8px; }
+  .msg { margin-top: 10px; padding: 10px; border-radius: 6px; font-size: 14px; }
+  .msg.ok { background: #d4edda; color: #155724; }
+  .msg.error { background: #f8d7da; color: #721c24; }
+  .volver { background: #999; margin-top: 15px; width: 100%; }
+  #stockActual { font-weight: bold; }
+</style>
+</head>
+<body>
+
+<h1>Gestión de productos</h1>
+<input type="text" id="buscador" placeholder="Buscar producto por nombre o código de barras...">
+<div id="resultados"></div>
+
+<div id="panelProducto" class="seleccionado" style="display:none;">
+  <strong id="nombreProducto"></strong><br>
+  Precio actual: $<span id="precioActual"></span><br>
+  Stock actual: <span id="stockActual">...</span>
+
+  <div class="acciones">
+    <button class="btn-precio" onclick="mostrarForm('precio')">Actualizar precio</button>
+    <button class="btn-ingreso" onclick="mostrarForm('ingreso')">Ingreso</button>
+    <button class="btn-ajuste" onclick="mostrarForm('ajuste')">Ajuste</button>
+    <button class="btn-devolucion" onclick="mostrarForm('devolucion')">Devolución</button>
+  </div>
+
+  <div id="form-precio" class="form-accion">
+    <label>Nuevo precio:</label>
+    <input type="number" id="nuevoPrecio" placeholder="0.00" step="0.01">
+    <button onclick="actualizarPrecio()">Guardar precio</button>
+  </div>
+
+  <div id="form-ingreso" class="form-accion">
+    <label>Cantidad que ingresa:</label>
+    <input type="number" id="cantIngreso" placeholder="0" min="1">
+    <button onclick="registrarMovimiento('ingreso', 'cantIngreso')">Confirmar ingreso</button>
+  </div>
+
+  <div id="form-ajuste" class="form-accion">
+    <label>Cantidad a ajustar (usá negativo para restar, ej: -3):</label>
+    <input type="number" id="cantAjuste" placeholder="0">
+    <button onclick="registrarMovimiento('ajuste', 'cantAjuste')">Confirmar ajuste</button>
+  </div>
+
+  <div id="form-devolucion" class="form-accion">
+    <label>Cantidad que devuelve el cliente:</label>
+    <input type="number" id="cantDevolucion" placeholder="0" min="1">
+    <button onclick="registrarMovimiento('devolucion', 'cantDevolucion')">Confirmar devolución</button>
+  </div>
+
+  <div id="mensaje"></div>
+  <button class="volver" onclick="volver()">← Buscar otro producto</button>
+</div>
+
+ <script>
+function formatearPrecio(valor) {
+  return Number(valor).toLocaleString('es-AR', { maximumFractionDigits: 0 });
+}
+
+let productoSeleccionado = null;   
+
+
+let timeoutBusquedaGestion;
+document.getElementById('buscador').addEventListener('input', (e) => {
+  clearTimeout(timeoutBusquedaGestion);
+  const texto = e.target.value.trim();
+  const cont = document.getElementById('resultados');
+  if (texto.length < 2) { cont.innerHTML = ''; return; }
+
+  timeoutBusquedaGestion = setTimeout(async () => {
+    const res = await fetch(`/api/productos?buscar=${encodeURIComponent(texto)}`);
+    const productos = await res.json();
+
+    cont.innerHTML = '';
+    productos.forEach(p => {
+      const div = document.createElement('div');
+      div.className = 'producto';
+      div.innerHTML = `${p.nombre} — $${formatearPrecio(p.precio)}`;
+      div.onclick = () => seleccionarProducto(p);
+      cont.appendChild(div);
+    });
+  }, 300);
+});
+
+async function seleccionarProducto(p) {
+  productoSeleccionado = p;
+  document.getElementById('nombreProducto').textContent = p.nombre;
+  document.getElementById('precioActual').textContent = formatearPrecio(p.precio);
+  document.getElementById('resultados').innerHTML = '';
+  document.getElementById('buscador').value = '';
+  document.getElementById('panelProducto').style.display = 'block';
+  document.querySelectorAll('.form-accion').forEach(f => f.classList.remove('activo'));
+  document.getElementById('mensaje').innerHTML = '';
+
+  document.getElementById('stockActual').textContent = '...';
+  await actualizarStockVisible();
+}
+
+async function actualizarStockVisible() {
+  if (!productoSeleccionado) return;
+  try {
+    const res = await fetch(`/api/productos/${productoSeleccionado.id}/stock`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'No se pudo obtener el stock');
+    document.getElementById('stockActual').textContent = data.stock;
+  } catch (err) {
+    document.getElementById('stockActual').textContent = '¿?';
+  }
+}
+
+function mostrarForm(tipo) {
+  document.querySelectorAll('.form-accion').forEach(f => f.classList.remove('activo'));
+  document.getElementById('form-' + tipo).classList.add('activo');
+}
+
+function volver() {
+  productoSeleccionado = null;
+  document.getElementById('panelProducto').style.display = 'none';
+}
+
+function mostrarMensaje(texto, tipo) {
+  document.getElementById('mensaje').innerHTML = `<div class="msg ${tipo}">${texto}</div>`;
+}
+
+async function actualizarPrecio() {
+  const nuevoPrecio = document.getElementById('nuevoPrecio').value;
+  if (!nuevoPrecio || nuevoPrecio <= 0) { mostrarMensaje('Ingresá un precio válido', 'error'); return; }
+
+  try {
+    const res = await fetch(`/api/productos/${productoSeleccionado.id}/precio`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ precio: parseFloat(nuevoPrecio) })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    const actualizados = data.actualizados;
+    const propio = actualizados.find(p => p.id === productoSeleccionado.id);
+    if (propio) document.getElementById('precioActual').textContent = formatearPrecio(propio.precio);
+    document.getElementById('nuevoPrecio').value = '';
+
+    if (actualizados.length > 1) {
+      mostrarMensaje(`Precio actualizado en ${actualizados.length} talles de la línea ✓`, 'ok');
+    } else {
+      mostrarMensaje('Precio actualizado correctamente ✓', 'ok');
+    }
+  } catch (err) {
+    mostrarMensaje('Error: ' + err.message, 'error');
+  }
+}
+
+async function registrarMovimiento(tipo, inputId) {
+  const cantidad = document.getElementById(inputId).value;
+  if (!cantidad || cantidad === '0') { mostrarMensaje('Ingresá una cantidad', 'error'); return; }
+
+  try {
+    const res = await fetch('/api/movimientos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        producto_id: productoSeleccionado.id,
+        canal: 'local',
+        tipo: tipo,
+        cantidad: parseInt(cantidad)
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+
+    document.getElementById(inputId).value = '';
+    mostrarMensaje(`${tipo.charAt(0).toUpperCase() + tipo.slice(1)} registrado correctamente ✓`, 'ok');
+    await actualizarStockVisible();
+  } catch (err) {
+    mostrarMensaje('Error: ' + err.message, 'error');
+  }
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Vender - Pañalera Arcoiris</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 700px; margin: 20px auto; padding: 0 15px; }
+  h1 { text-align: center; }
+  #buscador { width: 100%; padding: 15px; font-size: 20px; box-sizing: border-box; margin-bottom: 15px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { padding: 10px; border-bottom: 1px solid #ccc; text-align: left; font-size: 18px; }
+  .cantidad-controles { display: flex; align-items: center; gap: 8px; }
+  .cantidad-controles button {
+    width: 36px; height: 36px; font-size: 20px; font-weight: bold;
+    cursor: pointer; border: 1px solid #999; background: #eee; border-radius: 6px;
+  }
+  .cantidad-controles input {
+    width: 50px; text-align: center; font-size: 18px; padding: 6px;
+    border: 1px solid #999; border-radius: 6px;
+  }
+  #resultados { border: 1px solid #ccc; max-height: 200px; overflow-y: auto; margin-bottom: 15px; }
+  .resultado-item { padding: 12px; cursor: pointer; border-bottom: 1px solid #eee; }
+  .resultado-item:hover { background: #f0f0f0; }
+  #total { font-size: 24px; font-weight: bold; text-align: right; margin: 15px 0; }
+  #metodoPago { width: 100%; padding: 14px; font-size: 18px; margin-bottom: 12px; box-sizing: border-box; border-radius: 6px; border: 1px solid #999; }
+  #notaVenta { width: 100%; padding: 12px; font-size: 16px; margin-bottom: 12px; box-sizing: border-box; border-radius: 6px; border: 1px solid #999; }
+  #confirmar { width: 100%; padding: 18px; font-size: 22px; background: #2e7d32; color: white; border: none; border-radius: 8px; cursor: pointer; }
+  #confirmar:disabled { background: #999; }
+  #mensaje { text-align: center; font-size: 18px; font-weight: bold; margin-top: 15px; }
+  .quitar { background: #c62828; color: white; border: none; border-radius: 6px; width: 36px; height: 36px; font-size: 18px; cursor: pointer; }
+  .venta-par { background: #ffffff; }
+  .venta-impar { background: #eef3fb; }
+</style>
+</head>
+<body>
+
+<h1>Vender - Pañalera Arcoiris</h1>
+
+<input type="text" id="buscador" placeholder="Buscar o escanear producto...">
+<div id="resultados"></div>
+
+<table>
+  <thead>
+    <tr><th>Producto</th><th>Cantidad</th><th>Subtotal</th><th></th></tr>
+  </thead>
+  <tbody id="carrito"></tbody>
+</table>
+
+<div id="total">Total: $0</div>
+
+<select id="metodoPago">
+  <option value="efectivo">Efectivo</option>
+  <option value="debito">Débito</option>
+  <option value="credito">Crédito</option>
+  <option value="mercadopago">Mercado Pago</option>
+</select>
+
+<input type="text" id="notaVenta" placeholder="Nota (opcional, ej: 60000 MP + resto efectivo)">
+
+<button id="confirmar">Confirmar venta</button>
+<div id="mensaje"></div>
+<h2 style="margin-top:30px; font-size:18px;">Ventas de las últimas 24 horas</h2>
+<table>
+  <thead>
+    <tr><th>Hora</th><th>Producto</th><th>Cant.</th><th>Subtotal</th><th>Pago</th></tr>
+  </thead>
+  <tbody id="historial"></tbody>
+</table>
+<div id="totalHistorial" style="text-align:right; font-weight:bold; margin-top:8px;"></div>
+
+<script>
+function formatearPrecio(valor) {
+  return Number(valor).toLocaleString('es-AR', { maximumFractionDigits: 0 });
+}
+
+const API = 'http://localhost:3000';
+let carrito = []; // { id, nombre, precio, cantidad }
+
+const buscador = document.getElementById('buscador');
+const resultadosDiv = document.getElementById('resultados');
+const carritoBody = document.getElementById('carrito');
+const totalDiv = document.getElementById('total');
+const mensajeDiv = document.getElementById('mensaje');
+const confirmarBtn = document.getElementById('confirmar');
+const metodoPagoSelect = document.getElementById('metodoPago');
+const notaInput = document.getElementById('notaVenta');
+
+let timeoutBusqueda;
+buscador.addEventListener('input', () => {
+  clearTimeout(timeoutBusqueda);
+  const texto = buscador.value.trim();
+  if (!texto) { resultadosDiv.innerHTML = ''; return; }
+  timeoutBusqueda = setTimeout(() => buscarProductos(texto), 300);
+});
+
+// Si escanean con lector (termina con Enter), agrega directo si hay 1 solo resultado
+buscador.addEventListener('keydown', async (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const texto = buscador.value.trim();
+    if (!texto) return;
+    const productos = await buscarProductos(texto, true);
+    if (!productos || productos.length === 0) {
+      resultadosDiv.innerHTML = '<div class="resultado-item">Sin resultados</div>';
+    } else if (productos.length === 1) {
+      agregarAlCarrito(productos[0]);
+      buscador.value = '';
+      resultadosDiv.innerHTML = '';
+    } else {
+      mostrarResultados(productos);
+    }
+  }
+});
+async function buscarProductos(texto, silencioso) {
+  try {
+    const resp = await fetch(`${API}/api/productos?buscar=${encodeURIComponent(texto)}`);
+    const productos = await resp.json();
+    if (!silencioso) mostrarResultados(productos);
+    return productos;
+  } catch (err) {
+    if (!silencioso) resultadosDiv.innerHTML = '<div class="resultado-item">Error al buscar. ¿Está el servidor prendido?</div>';
+  }
+}
+
+function mostrarResultados(productos) {
+  if (productos.length === 0) {
+    resultadosDiv.innerHTML = '<div class="resultado-item">Sin resultados</div>';
+    return;
+  }
+  resultadosDiv.innerHTML = productos.map(p => `
+    <div class="resultado-item" onclick='seleccionarProducto(${JSON.stringify(p).replace(/'/g, "&apos;")})'>
+      ${p.nombre} — $${formatearPrecio(p.precio)} (stock: ${p.stock})
+    </div>
+  `).join('');
+}
+
+function seleccionarProducto(p) {
+  agregarAlCarrito(p);
+  buscador.value = '';
+  resultadosDiv.innerHTML = '';
+  buscador.focus();
+}
+
+function agregarAlCarrito(p) {
+  const cantidadInicial = 1;
+  const existente = carrito.find(item => item.id === p.id);
+  if (existente) {
+    existente.cantidad += cantidadInicial;
+  } else {
+    carrito.push({ id: p.id, nombre: p.nombre, precio: Number(p.precio), cantidad: cantidadInicial });
+  }
+  renderCarrito();
+}
+
+function cambiarCantidad(id, delta) {
+  const item = carrito.find(i => i.id === id);
+  if (!item) return;
+  item.cantidad += delta;
+  if (item.cantidad <= 0) {
+    carrito = carrito.filter(i => i.id !== id);
+  }
+  renderCarrito();
+}
+
+function setCantidad(id, valor) {
+  const item = carrito.find(i => i.id === id);
+  if (!item) return;
+  const cantidad = parseInt(valor);
+  if (!cantidad || cantidad <= 0) {
+    carrito = carrito.filter(i => i.id !== id);
+  } else {
+    item.cantidad = cantidad;
+  }
+  renderCarrito();
+}
+
+function renderCarrito() {
+  carritoBody.innerHTML = carrito.map(item => `
+    <tr>
+      <td>${item.nombre}</td>
+      <td>
+        <div class="cantidad-controles">
+          <button onclick="cambiarCantidad(${item.id}, -1)">－</button>
+          <input type="number" min="1" value="${item.cantidad}"
+                 onchange="setCantidad(${item.id}, this.value)">
+          <button onclick="cambiarCantidad(${item.id}, 1)">＋</button>
+        </div>
+      </td>
+      <td>$${formatearPrecio(item.precio * item.cantidad)}</td>
+      <td><button class="quitar" onclick="cambiarCantidad(${item.id}, -${item.cantidad})">✕</button></td>
+    </tr>
+  `).join('');
+
+  const total = carrito.reduce((acc, i) => acc + i.precio * i.cantidad, 0);
+  totalDiv.textContent = `Total: $${formatearPrecio(total)}`;
+  confirmarBtn.disabled = carrito.length === 0;
+}
+
+confirmarBtn.addEventListener('click', async () => {
+  if (carrito.length === 0) return;
+  confirmarBtn.disabled = true;
+  mensajeDiv.textContent = 'Guardando venta...';
+  mensajeDiv.style.color = 'black';
+
+  const metodoPago = metodoPagoSelect.value;
+  const nota = notaInput.value.trim() || null;
+  // Mismo id para todos los productos de esta venta, así se agrupan en el historial
+  const ventaId = 'v' + Date.now();
+
+  try {
+    for (const item of carrito) {
+      const resp = await fetch(`${API}/api/ventas`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          producto_id: item.id,
+          canal: 'local',
+          cantidad: item.cantidad,
+          metodo_pago: metodoPago,
+          nota: nota,
+          venta_id: ventaId
+        })
+      });
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(`${item.nombre}: ${err.error || 'error desconocido'}`);
+      }
+    }
+    mensajeDiv.textContent = 'Venta confirmada con éxito';
+    mensajeDiv.style.color = 'green';
+    carrito = [];
+    notaInput.value = '';
+    renderCarrito();
+    cargarHistorial();
+  } catch (err) {
+    mensajeDiv.textContent = 'Error: ' + err.message;
+    mensajeDiv.style.color = 'red';
+    confirmarBtn.disabled = false;
+  }
+});
+
+const nombresMetodoPago = {
+  efectivo: 'Efectivo',
+  debito: 'Débito',
+  credito: 'Crédito',
+  mercadopago: 'Mercado Pago'
+};
+
+async function cargarHistorial() {
+  try {
+    const resp = await fetch(`${API}/api/movimientos/hoy`);
+    const ventas = await resp.json();
+    const historialBody = document.getElementById('historial');
+    const totalHistorial = document.getElementById('totalHistorial');
+
+    let ventaAnterior = null;
+    let clasePar = true;
+
+    historialBody.innerHTML = ventas.map(v => {
+      const hora = new Date(v.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+      const pago = nombresMetodoPago[v.metodo_pago] || '—';
+      const notaIcono = v.nota ? ` 📝` : '';
+      const tituloNota = v.nota ? ` title="${v.nota.replace(/"/g, '&quot;')}"` : '';
+
+      // Si cambia el venta_id respecto de la fila anterior, alternamos el color.
+      // Si no hay venta_id (ventas viejas antes de este cambio), cada fila es su propio grupo.
+      const idGrupo = v.venta_id || `sola-${v.id}`;
+      if (idGrupo !== ventaAnterior) {
+        clasePar = !clasePar;
+        ventaAnterior = idGrupo;
+      }
+      const clase = clasePar ? 'venta-par' : 'venta-impar';
+
+      return `
+        <tr class="${clase}"${tituloNota}>
+          <td>${hora}</td>
+          <td>${v.nombre}</td>
+          <td>${v.cantidad}</td>
+          <td>$${formatearPrecio(v.subtotal)}</td>
+          <td>${pago}${notaIcono}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const totalDia = ventas.reduce((acc, v) => acc + Number(v.subtotal), 0);
+    totalHistorial.textContent = `Total del día: $${formatearPrecio(totalDia)}`;
+  } catch (err) {
+    console.error('Error al cargar historial:', err);
+  }
+}
+
+cargarHistorial();
+
+</script>
+
+</body>
+</html>

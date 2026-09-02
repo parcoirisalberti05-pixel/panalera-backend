@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Test API - Pañalera Arcoiris</title>
+<style>
+  body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+  h2 { border-bottom: 2px solid #333; padding-bottom: 5px; }
+  label { display: block; margin-top: 10px; font-weight: bold; }
+  input, select { width: 100%; padding: 6px; margin-top: 4px; box-sizing: border-box; }
+  button { margin-top: 15px; padding: 10px 20px; background: #2a7; color: white; border: none; cursor: pointer; font-weight: bold; }
+  button:hover { background: #196; }
+  pre { background: #f4f4f4; padding: 10px; white-space: pre-wrap; word-break: break-all; }
+  .bloque { margin-bottom: 40px; padding: 15px; border: 1px solid #ccc; border-radius: 6px; }
+</style>
+</head>
+<body>
+
+<h1>Probador de API - Pañalera Arcoiris</h1>
+
+<div class="bloque">
+  <h2>1) Consultar stock de un producto</h2>
+  <label>ID del producto</label>
+  <input id="stockId" type="number" value="486">
+  <button onclick="verStock()">Consultar stock</button>
+  <pre id="stockResultado"></pre>
+</div>
+
+<div class="bloque">
+  <h2>2) Registrar Ingreso / Ajuste / Devolución</h2>
+  <label>ID del producto</label>
+  <input id="movProductoId" type="number" value="486">
+  <label>Canal</label>
+  <select id="movCanal">
+    <option value="local">local</option>
+    <option value="web">web</option>
+  </select>
+  <label>Tipo</label>
+  <select id="movTipo">
+    <option value="ingreso">ingreso</option>
+    <option value="ajuste">ajuste</option>
+    <option value="devolucion">devolucion</option>
+  </select>
+  <label>Cantidad</label>
+  <input id="movCantidad" type="number" value="10">
+  <label>Nota (opcional)</label>
+  <input id="movNota" type="text" placeholder="Ej: Reposición de stock">
+  <button onclick="registrarMovimiento()">Registrar movimiento</button>
+  <pre id="movResultado"></pre>
+</div>
+
+<div class="bloque">
+  <h2>3) Registrar Venta</h2>
+  <label>ID del producto</label>
+  <input id="ventaProductoId" type="number" value="486">
+  <label>Canal</label>
+  <select id="ventaCanal">
+    <option value="local">local</option>
+    <option value="web">web</option>
+  </select>
+  <label>Cantidad</label>
+  <input id="ventaCantidad" type="number" value="1">
+  <label>Nota (opcional)</label>
+  <input id="ventaNota" type="text" placeholder="Ej: Venta mostrador">
+  <button onclick="registrarVenta()">Registrar venta</button>
+  <pre id="ventaResultado"></pre>
+</div>
+
+<script>
+const BASE = 'http://localhost:3000';
+
+async function verStock() {
+  const id = document.getElementById('stockId').value;
+  const res = await fetch(`${BASE}/api/productos/${id}/stock`);
+  const data = await res.json();
+  document.getElementById('stockResultado').textContent = JSON.stringify(data, null, 2);
+}
+
+async function registrarMovimiento() {
+  const body = {
+    producto_id: Number(document.getElementById('movProductoId').value),
+    canal: document.getElementById('movCanal').value,
+    tipo: document.getElementById('movTipo').value,
+    cantidad: Number(document.getElementById('movCantidad').value),
+    nota: document.getElementById('movNota').value || null
+  };
+  const res = await fetch(`${BASE}/api/movimientos`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  document.getElementById('movResultado').textContent = `Status: ${res.status}\n` + JSON.stringify(data, null, 2);
+}
+
+async function registrarVenta() {
+  const body = {
+    producto_id: Number(document.getElementById('ventaProductoId').value),
+    canal: document.getElementById('ventaCanal').value,
+    cantidad: Number(document.getElementById('ventaCantidad').value),
+    nota: document.getElementById('ventaNota').value || null
+  };
+  const res = await fetch(`${BASE}/api/ventas`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  document.getElementById('ventaResultado').textContent = `Status: ${res.status}\n` + JSON.stringify(data, null, 2);
+}
+</script>
+
+</body>
+</html>

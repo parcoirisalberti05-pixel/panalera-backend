@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Cargar Producto - Pañalera Arcoiris</title>
+<style>
+body{font-family:Arial;background:#f5f5f5;padding:20px;max-width:500px;margin:0 auto}
+h1{font-size:20px;text-align:center}
+label{font-weight:bold;display:block;margin-top:12px;margin-bottom:5px}
+input,select{width:100%;padding:12px;font-size:16px;box-sizing:border-box;border:2px solid #ccc;border-radius:8px}
+button{width:100%;padding:15px;font-size:18px;background:#4CAF50;color:white;border:none;border-radius:8px;margin-top:20px}
+button:disabled{background:#aaa}
+#mensaje{text-align:center;margin-top:15px;font-weight:bold}
+</style>
+</head>
+<body>
+<h1>Cargar Producto - Pañalera Arcoiris</h1>
+
+<label for="nombre">Nombre del producto</label>
+<input type="text" id="nombre" placeholder="Ej: Shampoo Johnson 400ml">
+
+<label for="codigo_barras">Código de barras (opcional)</label>
+<input type="text" id="codigo_barras" placeholder="Escanear o dejar vacío">
+
+<label for="precio">Precio</label>
+<input type="number" id="precio" step="0.01" placeholder="Ej: 3500">
+
+<label for="marca">Marca</label>
+<select id="marca">
+<option value="">Sin marca</option>
+</select>
+
+<label for="categoria">Categoría</label>
+<select id="categoria">
+<option value="">Sin categoría</option>
+</select>
+
+<button id="btnGuardar">Guardar producto</button>
+<div id="mensaje"></div>
+
+<script>
+const API = "http://localhost:3000";
+
+async function cargarDesplegables() {
+  const respMarcas = await fetch(API + "/api/marcas");
+  const marcas = await respMarcas.json();
+  const selectMarca = document.getElementById("marca");
+  marcas.forEach(m => {
+    const opcion = document.createElement("option");
+    opcion.value = m.id;
+    opcion.textContent = m.nombre;
+    selectMarca.appendChild(opcion);
+  });
+
+  const respCategorias = await fetch(API + "/api/categorias");
+  const categorias = await respCategorias.json();
+  const selectCategoria = document.getElementById("categoria");
+  categorias.forEach(c => {
+    const opcion = document.createElement("option");
+    opcion.value = c.id;
+    opcion.textContent = c.nombre;
+    selectCategoria.appendChild(opcion);
+  });
+}
+
+cargarDesplegables();
+
+document.getElementById("btnGuardar").addEventListener("click", async function() {
+  const nombre = document.getElementById("nombre").value.trim();
+  const codigo_barras = document.getElementById("codigo_barras").value.trim();
+  const precio = document.getElementById("precio").value;
+  const marca_id = document.getElementById("marca").value;
+  const categoria_id = document.getElementById("categoria").value;
+  const mensaje = document.getElementById("mensaje");
+  const boton = document.getElementById("btnGuardar");
+
+  if (!nombre || !precio) {
+    mensaje.textContent = "Falta el nombre o el precio";
+    return;
+  }
+
+  boton.disabled = true;
+  mensaje.textContent = "Guardando...";
+
+  try {
+    const resp = await fetch(API + "/api/productos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        nombre: nombre,
+        codigo_barras: codigo_barras || null,
+        precio: parseFloat(precio),
+        marca_id: marca_id || null,
+        categoria_id: categoria_id || null
+      })
+    });
+    const datos = await resp.json();
+    if (resp.ok) {
+      mensaje.textContent = "Producto guardado: " + datos.nombre;
+      document.getElementById("nombre").value = "";
+      document.getElementById("codigo_barras").value = "";
+      document.getElementById("precio").value = "";
+      document.getElementById("marca").value = "";
+      document.getElementById("categoria").value = "";
+    } else {
+      mensaje.textContent = "Error: " + (datos.error || "no se pudo guardar");
+    }
+  } catch (err) {
+    mensaje.textContent = "Error de conexion con el servidor";
+  }
+  boton.disabled = false;
+});
+</script>
+</body>
+</html>
