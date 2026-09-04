@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Stock - Pañalera Arcoiris</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #f4f4f4;
+    margin: 0;
+    padding: 20px;
+  }
+  h1 {
+    text-align: center;
+    color: #333;
+  }
+  .filtros {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .filtros select {
+    padding: 8px;
+    font-size: 15px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    min-width: 200px;
+  }
+  .info {
+    text-align: center;
+    color: #555;
+    margin-bottom: 10px;
+  }
+  table {
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
+    border-collapse: collapse;
+    background: white;
+    box-shadow: 0 0 8px rgba(0,0,0,0.1);
+  }
+  th, td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+  }
+  th {
+    background: #444;
+    color: white;
+    position: sticky;
+    top: 0;
+  }
+  tr:hover {
+    background: #f9f9f9;
+  }
+  .stock {
+    font-weight: bold;
+    text-align: center;
+    border-radius: 4px;
+    padding: 4px 8px;
+  }
+  .stock-cero {
+    background: #fdecea;
+    color: #c0392b;
+  }
+  .stock-bajo {
+    background: #fff8e1;
+    color: #b8860b;
+  }
+  .stock-ok {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+  .vacio {
+    text-align: center;
+    color: #999;
+    padding: 30px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Stock - Pañalera Arcoiris</h1>
+
+<div class="filtros">
+  <select id="filtroCategoria">
+    <option value="">Todas las categorías</option>
+  </select>
+  <select id="filtroMarca">
+    <option value="">Todas las marcas</option>
+  </select>
+</div>
+
+<div class="info" id="contador"></div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Producto</th>
+      <th>Marca</th>
+      <th>Categoría</th>
+      <th>Stock</th>
+    </tr>
+  </thead>
+  <tbody id="tablaStock"></tbody>
+</table>
+
+<script>
+const API = 'http://localhost:3000';
+let todosLosProductos = [];
+
+function claseStock(stock) {
+  const s = Number(stock);
+  if (s === 0) return 'stock-cero';
+  if (s <= 2) return 'stock-bajo';
+  return 'stock-ok';
+}
+
+function actualizarMarcas() {
+  const categoria = document.getElementById('filtroCategoria').value;
+  const selMarca = document.getElementById('filtroMarca');
+  const marcaActual = selMarca.value;
+
+  const productosFiltrados = categoria
+    ? todosLosProductos.filter(p => p.categoria === categoria)
+    : todosLosProductos;
+
+  const marcasUnicas = [...new Set(productosFiltrados.map(p => p.marca).filter(Boolean))].sort();
+
+  selMarca.innerHTML = '<option value="">Todas las marcas</option>';
+  marcasUnicas.forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m;
+    opt.textContent = m;
+    selMarca.appendChild(opt);
+  });
+
+  if (marcasUnicas.includes(marcaActual)) {
+    selMarca.value = marcaActual;
+  }
+}
+
+function renderTabla() {
+  const categoria = document.getElementById('filtroCategoria').value;
+  const marca = document.getElementById('filtroMarca').value;
+
+  const productos = todosLosProductos.filter(p =>
+    (!categoria || p.categoria === categoria) &&
+    (!marca || p.marca === marca)
+  );
+
+  const tbody = document.getElementById('tablaStock');
+  const contador = document.getElementById('contador');
+
+  if (productos.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="vacio">No hay productos con estos filtros</td></tr>';
+    contador.textContent = '';
+    return;
+  }
+
+  contador.textContent = `${productos.length} producto(s)`;
+
+  tbody.innerHTML = productos.map(p => `
+    <tr>
+      <td>${p.nombre}</td>
+      <td>${p.marca || '-'}</td>
+      <td>${p.categoria || '-'}</td>
+      <td><span class="stock ${claseStock(p.stock)}">${p.stock}</span></td>
+    </tr>
+  `).join('');
+}
+
+async function iniciar() {
+  todosLosProductos = await fetch(`${API}/api/stock`).then(r => r.json());
+
+  const categorias = [...new Set(todosLosProductos.map(p => p.categoria).filter(Boolean))].sort();
+  const selCat = document.getElementById('filtroCategoria');
+  categorias.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = c;
+    selCat.appendChild(opt);
+  });
+
+  actualizarMarcas();
+  renderTabla();
+}
+
+document.getElementById('filtroCategoria').addEventListener('change', () => {
+  actualizarMarcas();
+  renderTabla();
+});
+document.getElementById('filtroMarca').addEventListener('change', renderTabla);
+
+iniciar();
+</script>
+
+</body>
+</html>

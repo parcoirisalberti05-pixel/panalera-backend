@@ -18,4 +18,8 @@ pool.connect((err) => {
   }
 });
 
+pool.on('error', (err) => {
+  console.error('Error inesperado en el pool de PostgreSQL:', err.message);
+});
+
 module.exports = pool;

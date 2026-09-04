@@ -105,6 +105,50 @@ app.get('/api/marcas', async (req, res) => {
   }
 });
 
+// Trae el stock de todos los productos, con filtros opcionales por categoria y marca
+app.get('/api/stock', async (req, res) => {
+  const { categoria_id, marca_id } = req.query;
+
+  try {
+    let query = `
+      SELECT 
+        p.id,
+        p.nombre,
+        m.nombre AS marca,
+        c.nombre AS categoria,
+        COALESCE(SUM(
+          CASE WHEN ms.tipo = 'venta' THEN -ms.cantidad ELSE ms.cantidad END
+        ), 0) AS stock
+      FROM productos p
+      LEFT JOIN marcas m ON p.marca_id = m.id
+      LEFT JOIN categorias c ON p.categoria_id = c.id
+      LEFT JOIN movimientos_stock ms ON ms.producto_id = p.id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (categoria_id) {
+      params.push(categoria_id);
+      query += ` AND p.categoria_id = $${params.length}`;
+    }
+    if (marca_id) {
+      params.push(marca_id);
+      query += ` AND p.marca_id = $${params.length}`;
+    }
+
+    query += `
+      GROUP BY p.id, p.nombre, m.nombre, c.nombre
+      ORDER BY c.nombre, m.nombre, p.nombre
+    `;
+
+    const resultado = await pool.query(query, params);
+    res.json(resultado.rows);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: 'Error al obtener el stock' });
+  }
+});
+
 // Crea un producto nuevo
 app.post('/api/productos', async (req, res) => {
   const { nombre, codigo_barras, precio, marca_id, categoria_id } = req.body;
@@ -296,6 +340,81 @@ app.post('/api/movimientos', async (req, res) => {
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ error: 'Error al registrar el movimiento' });
+  }
+});
+
+// ===== PEDIDOS WEB =====
+
+// Crea un pedido nuevo (lo llama el checkout de la pagina web)
+app.post('/api/pedidos', async (req, res) => {
+  const {
+    cliente_nombre,
+    cliente_telefono,
+    direccion,
+    localidad,
+    codigo_postal,
+    items,
+    total,
+    metodo_pago
+  } = req.body;
+
+  if (!cliente_nombre || !direccion || !items || !total) {
+    return res.status(400).json({ error: 'Faltan datos obligatorios del pedido' });
+  }
+
+  try {
+    const numero_seguimiento = 'ENV-' + Date.now();
+
+    const resultado = await pool.query(
+      `INSERT INTO pedidos
+        (cliente_nombre, cliente_telefono, direccion, localidad, codigo_postal, items, total, metodo_pago, estado, numero_seguimiento, fecha)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pendiente', $9, NOW())
+       RETURNING *`,
+      [cliente_nombre, cliente_telefono || null, direccion, localidad || null, codigo_postal || null, JSON.stringify(items), total, metodo_pago || null, numero_seguimiento]
+    );
+
+    res.status(201).json(resultado.rows[0]);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: 'Error al crear el pedido' });
+  }
+});
+
+// Lista todos los pedidos (para el panel de administracion y para "Mis Pedidos" del cliente)
+app.get('/api/pedidos', async (req, res) => {
+  try {
+    const resultado = await pool.query(
+      `SELECT * FROM pedidos ORDER BY fecha DESC`
+    );
+    res.json(resultado.rows);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: 'Error al obtener pedidos' });
+  }
+});
+
+// Cambia el estado de un pedido (lo usa el panel de administracion, nunca el cliente)
+app.patch('/api/pedidos/:id/estado', async (req, res) => {
+  const { id } = req.params;
+  const { estado } = req.body;
+
+  const estadosValidos = ['pendiente', 'preparando', 'en_camino', 'entregado'];
+  if (!estadosValidos.includes(estado)) {
+    return res.status(400).json({ error: 'Estado inválido' });
+  }
+
+  try {
+    const resultado = await pool.query(
+      `UPDATE pedidos SET estado = $1 WHERE id = $2 RETURNING *`,
+      [estado, id]
+    );
+    if (resultado.rows.length === 0) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+    res.json(resultado.rows[0]);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: 'Error al actualizar el estado del pedido' });
   }
 });
 
