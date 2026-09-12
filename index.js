@@ -2,6 +2,47 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 const pool = require('./db');
+const nodemailer = require('nodemailer');
+
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
+
+async function enviarEmailConfirmacion(pedido) {
+  try {
+    let itemsHtml = '';
+    const items = typeof pedido.items === 'string' ? JSON.parse(pedido.items) : pedido.items;
+    items.forEach(it => {
+      const nombre = it.nombre || it.name || 'Producto';
+      const cantidad = it.cantidad || it.quantity || 1;
+      itemsHtml += `<li>${cantidad} x ${nombre}</li>`;
+    });
+
+    await transporter.sendMail({
+      from: `"Pañalera Arcoiris" <${process.env.EMAIL_USER}>`,
+      to: pedido.cliente_email,
+      subject: `Confirmación de tu pedido - ${pedido.numero_seguimiento}`,
+      html: `
+        <h2>¡Gracias por tu compra, ${pedido.cliente_nombre}!</h2>
+        <p>Tu pedido fue registrado con éxito.</p>
+        <p><strong>Número de seguimiento:</strong> ${pedido.numero_seguimiento}</p>
+        <p><strong>Productos:</strong></p>
+        <ul>${itemsHtml}</ul>
+        <p><strong>Total:</strong> $${Number(pedido.total).toLocaleString('es-AR')}</p>
+        <p><strong>Dirección de entrega:</strong> ${pedido.direccion}${pedido.localidad ? ', ' + pedido.localidad : ''}</p>
+        <p>Guardá este número para hacer seguimiento de tu pedido en nuestro sitio.</p>
+        <p>¡Gracias por elegirnos!</p>
+      `
+    });
+    console.log('Email de confirmación enviado a', pedido.cliente_email);
+  } catch (error) {
+    console.error('Error al enviar email:', error.message);
+  }
+}
 
 const app = express();
 app.use(express.static(__dirname));
@@ -350,6 +391,7 @@ app.post('/api/pedidos', async (req, res) => {
   const {
     cliente_nombre,
     cliente_telefono,
+    cliente_email,
     direccion,
     localidad,
     codigo_postal,
@@ -367,13 +409,19 @@ app.post('/api/pedidos', async (req, res) => {
 
     const resultado = await pool.query(
       `INSERT INTO pedidos
-        (cliente_nombre, cliente_telefono, direccion, localidad, codigo_postal, items, total, metodo_pago, estado, numero_seguimiento, fecha)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pendiente', $9, NOW())
+        (cliente_nombre, cliente_telefono, cliente_email, direccion, localidad, codigo_postal, items, total, metodo_pago, estado, numero_seguimiento, fecha)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pendiente', $10, NOW())
        RETURNING *`,
-      [cliente_nombre, cliente_telefono || null, direccion, localidad || null, codigo_postal || null, JSON.stringify(items), total, metodo_pago || null, numero_seguimiento]
+      [cliente_nombre, cliente_telefono || null, cliente_email || null, direccion, localidad || null, codigo_postal || null, JSON.stringify(items), total, metodo_pago || null, numero_seguimiento]
     );
 
-    res.status(201).json(resultado.rows[0]);
+    const pedidoCreado = resultado.rows[0];
+
+    if (pedidoCreado.cliente_email) {
+      enviarEmailConfirmacion(pedidoCreado);
+    }
+
+    res.status(201).json(pedidoCreado);
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ error: 'Error al crear el pedido' });

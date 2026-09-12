@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pedidos Web - Pañalera Arcoiris</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #f4f5f7;
+    margin: 0;
+    padding: 24px;
+    color: #2b2b33;
+  }
+  h1 {
+    margin: 0 0 6px 0;
+    font-size: 26px;
+  }
+  .subtitle {
+    color: #777;
+    margin-bottom: 24px;
+  }
+  .toolbar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .filtro-btn {
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: 1px solid #ddd;
+    background: white;
+    cursor: pointer;
+    font-size: 14px;
+    color: #555;
+  }
+  .filtro-btn.activo {
+    background: #e8447a;
+    color: white;
+    border-color: #e8447a;
+  }
+  #refrescar {
+    margin-left: auto;
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: none;
+    background: #2b2b33;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .lista {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .pedido-card {
+    background: white;
+    border-radius: 14px;
+    padding: 18px 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    border-left: 6px solid #ccc;
+  }
+  .pedido-card.pendiente { border-left-color: #e8447a; }
+  .pedido-card.preparando { border-left-color: #e0a800; }
+  .pedido-card.en_camino { border-left-color: #2f7fd6; }
+  .pedido-card.entregado { border-left-color: #34a853; }
+
+  .pedido-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .pedido-id {
+    font-weight: bold;
+    font-size: 17px;
+  }
+  .seguimiento {
+    color: #888;
+    font-size: 13px;
+  }
+  .fecha {
+    color: #999;
+    font-size: 13px;
+  }
+  .estado-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 14px;
+    font-size: 12px;
+    font-weight: 600;
+    color: white;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .estado-badge.pendiente { background: #e8447a; }
+  .estado-badge.preparando { background: #e0a800; }
+  .estado-badge.en_camino { background: #2f7fd6; }
+  .estado-badge.entregado { background: #34a853; }
+
+  .datos-cliente {
+    font-size: 14px;
+    line-height: 1.6;
+    margin-bottom: 10px;
+  }
+  .datos-cliente b { color: #2b2b33; }
+
+  .items-lista {
+    background: #fafafa;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    font-size: 14px;
+  }
+  .items-lista div { padding: 2px 0; }
+
+  .pedido-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .total {
+    font-weight: bold;
+    font-size: 16px;
+  }
+  .metodo-pago {
+    color: #777;
+    font-size: 13px;
+  }
+  select.estado-select {
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .vacio {
+    text-align: center;
+    color: #999;
+    padding: 60px 20px;
+    font-size: 15px;
+  }
+  .cargando {
+    text-align: center;
+    color: #999;
+    padding: 40px;
+  }
+</style>
+</head>
+<body>
+
+<h1>📦 Pedidos Web</h1>
+<div class="subtitle">Pedidos hechos por clientes desde el sitio online</div>
+
+<div class="toolbar">
+  <button class="filtro-btn activo" data-filtro="todos">Todos</button>
+  <button class="filtro-btn" data-filtro="pendiente">Pendientes</button>
+  <button class="filtro-btn" data-filtro="preparando">Preparando</button>
+  <button class="filtro-btn" data-filtro="en_camino">En camino</button>
+  <button class="filtro-btn" data-filtro="entregado">Entregados</button>
+  <button id="refrescar">↻ Refrescar</button>
+</div>
+
+<div id="lista" class="lista">
+  <div class="cargando">Cargando pedidos...</div>
+</div>
+
+<script>
+const API_URL = 'https://panalera-backend-production.up.railway.app/api/pedidos';
+let pedidosGlobal = [];
+let filtroActual = 'todos';
+
+const nombresEstado = {
+  pendiente: 'Pendiente',
+  preparando: 'Preparando',
+  en_camino: 'En camino',
+  entregado: 'Entregado'
+};
+
+async function cargarPedidos() {
+  const lista = document.getElementById('lista');
+  lista.innerHTML = '<div class="cargando">Cargando pedidos...</div>';
+  try {
+    const res = await fetch(API_URL);
+    if (!res.ok) throw new Error('Error al traer pedidos');
+    pedidosGlobal = await res.json();
+    renderizar();
+  } catch (err) {
+    lista.innerHTML = '<div class="vacio">No se pudieron cargar los pedidos. Revisá tu conexión e intentá de nuevo.</div>';
+    console.error(err);
+  }
+}
+
+function renderizar() {
+  const lista = document.getElementById('lista');
+  let pedidos = pedidosGlobal;
+  if (filtroActual !== 'todos') {
+    pedidos = pedidos.filter(p => p.estado === filtroActual);
+  }
+
+  if (pedidos.length === 0) {
+    lista.innerHTML = '<div class="vacio">No hay pedidos en esta categoría.</div>';
+    return;
+  }
+
+  lista.innerHTML = pedidos.map(p => {
+    let items = [];
+    try {
+      items = typeof p.items === 'string' ? JSON.parse(p.items) : p.items;
+    } catch (e) { items = []; }
+
+    const itemsHtml = items.map(it => {
+      const nombre = it.nombre || it.name || 'Producto';
+      const cantidad = it.cantidad || it.quantity || 1;
+      return `<div>• ${cantidad} x ${nombre}</div>`;
+    }).join('');
+
+    const fecha = new Date(p.fecha).toLocaleString('es-AR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+
+    return `
+      <div class="pedido-card ${p.estado}">
+        <div class="pedido-header">
+          <div>
+            <span class="pedido-id">Pedido #${p.id}</span>
+            <div class="seguimiento">${p.numero_seguimiento || ''}</div>
+          </div>
+          <div style="text-align:right">
+            <span class="estado-badge ${p.estado}">${nombresEstado[p.estado] || p.estado}</span>
+            <div class="fecha">${fecha}</div>
+          </div>
+        </div>
+
+        <div class="datos-cliente">
+          <div><b>${p.cliente_nombre}</b> ${p.cliente_telefono ? '· ' + p.cliente_telefono : ''}</div>
+          <div>${p.direccion}${p.localidad ? ', ' + p.localidad : ''}${p.codigo_postal ? ' (' + p.codigo_postal + ')' : ''}</div>
+        </div>
+
+        <div class="items-lista">${itemsHtml}</div>
+
+        <div class="pedido-footer">
+          <div>
+            <div class="total">$ ${Number(p.total).toLocaleString('es-AR')}</div>
+            <div class="metodo-pago">${p.metodo_pago || ''}</div>
+          </div>
+          <select class="estado-select" data-id="${p.id}">
+            <option value="pendiente" ${p.estado === 'pendiente' ? 'selected' : ''}>Pendiente</option>
+            <option value="preparando" ${p.estado === 'preparando' ? 'selected' : ''}>Preparando</option>
+            <option value="en_camino" ${p.estado === 'en_camino' ? 'selected' : ''}>En camino</option>
+            <option value="entregado" ${p.estado === 'entregado' ? 'selected' : ''}>Entregado</option>
+          </select>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  document.querySelectorAll('.estado-select').forEach(sel => {
+    sel.addEventListener('change', async (e) => {
+      const id = e.target.dataset.id;
+      const nuevoEstado = e.target.value;
+      e.target.disabled = true;
+      try {
+        const res = await fetch(`${API_URL}/${id}/estado`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ estado: nuevoEstado })
+        });
+        if (!res.ok) throw new Error('No se pudo actualizar');
+        await cargarPedidos();
+      } catch (err) {
+        alert('No se pudo actualizar el estado. Probá de nuevo.');
+        e.target.disabled = false;
+        console.error(err);
+      }
+    });
+  });
+}
+
+document.querySelectorAll('.filtro-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filtro-btn').forEach(b => b.classList.remove('activo'));
+    btn.classList.add('activo');
+    filtroActual = btn.dataset.filtro;
+    renderizar();
+  });
+});
+
+document.getElementById('refrescar').addEventListener('click', cargarPedidos);
+
+cargarPedidos();
+</script>
+
+</body>
+</html>
