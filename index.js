@@ -2,18 +2,9 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 const pool = require('./db');
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  },
-  family: 4
-});
 async function enviarEmailConfirmacion(pedido) {
   try {
     let itemsHtml = '';
@@ -24,9 +15,8 @@ async function enviarEmailConfirmacion(pedido) {
       itemsHtml += `<li>${cantidad} x ${nombre}</li>`;
     });
 
-    await transporter.sendMail({
-      from: `"Pañalera Arcoiris" <${process.env.EMAIL_USER}>`,
-      to: pedido.cliente_email,
+await resend.emails.send({  
+      from: 'Pañalera Arcoiris <onboarding@resend.dev>',
       subject: `Confirmación de tu pedido - ${pedido.numero_seguimiento}`,
       html: `
         <h2>¡Gracias por tu compra, ${pedido.cliente_nombre}!</h2>
