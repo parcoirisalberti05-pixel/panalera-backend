@@ -15,8 +15,9 @@ async function enviarEmailConfirmacion(pedido) {
       itemsHtml += `<li>${cantidad} x ${nombre}</li>`;
     });
 
-await resend.emails.send({  
+      await resend.emails.send({  
       from: 'Pañalera Arcoiris <onboarding@resend.dev>',
+      to: pedido.cliente_email,
       subject: `Confirmación de tu pedido - ${pedido.numero_seguimiento}`,
       html: `
         <h2>¡Gracias por tu compra, ${pedido.cliente_nombre}!</h2>
