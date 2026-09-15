@@ -377,9 +377,9 @@ app.post('/api/movimientos', async (req, res) => {
   }
 });
 
-// ===== PEDIDOS WEB =====
-
 // Crea un pedido nuevo (lo llama el checkout de la pagina web)
+// Descuenta stock de forma atómica por cada producto, igual que /api/ventas.
+// Si algún producto no tiene stock suficiente, se cancela todo el pedido.
 app.post('/api/pedidos', async (req, res) => {
   const {
     cliente_nombre,
@@ -397,15 +397,67 @@ app.post('/api/pedidos', async (req, res) => {
     return res.status(400).json({ error: 'Faltan datos obligatorios del pedido' });
   }
 
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
+
+    // 1. Para cada item del carrito, traducir id_web -> producto_id real,
+    //    bloquear la fila del producto, chequear stock y descontar.
+    for (const item of items) {
+      const idWeb = item.id;
+      const cantidad = Number(item.cantidad);
+
+      const pwResult = await client.query(
+        `SELECT pw.producto_id
+         FROM productos_web pw
+         JOIN productos p ON p.id = pw.producto_id
+         WHERE pw.id_web = $1
+         FOR UPDATE OF p`,
+        [idWeb]
+      );
+
+      if (pwResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: `Producto no encontrado: ${idWeb}` });
+      }
+
+      const productoId = pwResult.rows[0].producto_id;
+
+      const stockResult = await client.query(
+        `SELECT COALESCE(SUM(
+           CASE WHEN tipo = 'venta' THEN -cantidad ELSE cantidad END
+         ), 0) AS stock
+         FROM movimientos_stock WHERE producto_id = $1`,
+        [productoId]
+      );
+      const stockActual = Number(stockResult.rows[0].stock);
+
+      if (stockActual < cantidad) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          error: `Sin stock suficiente para "${item.nombre}"`,
+          stock_disponible: stockActual
+        });
+      }
+
+      await client.query(
+        `INSERT INTO movimientos_stock (producto_id, canal, tipo, cantidad, fecha, nota)
+         VALUES ($1, 'web', 'venta', $2, NOW(), $3)`,
+        [productoId, cantidad, `Pedido web - ${item.nombre}`]
+      );
+    }
+
+    // 2. Ya descontado el stock de todos los items, crear el pedido.
     const numero_seguimiento = 'P' + Date.now().toString(36).toUpperCase().slice(-6);
-    const resultado = await pool.query(
+    const resultado = await client.query(
       `INSERT INTO pedidos
         (cliente_nombre, cliente_telefono, cliente_email, direccion, localidad, codigo_postal, items, total, metodo_pago, estado, numero_seguimiento, fecha)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pendiente', $10, NOW())
        RETURNING *`,
       [cliente_nombre, cliente_telefono || null, cliente_email || null, direccion, localidad || null, codigo_postal || null, JSON.stringify(items), total, metodo_pago || null, numero_seguimiento]
     );
+
+    await client.query('COMMIT');
 
     const pedidoCreado = resultado.rows[0];
 
@@ -415,49 +467,10 @@ app.post('/api/pedidos', async (req, res) => {
 
     res.status(201).json(pedidoCreado);
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error(error.message);
     res.status(500).json({ error: 'Error al crear el pedido' });
+  } finally {
+    client.release();
   }
-});
-
-// Lista todos los pedidos (para el panel de administracion y para "Mis Pedidos" del cliente)
-app.get('/api/pedidos', async (req, res) => {
-  try {
-    const resultado = await pool.query(
-      `SELECT * FROM pedidos ORDER BY fecha DESC`
-    );
-    res.json(resultado.rows);
-  } catch (error) {
-    console.error(error.message);
-    res.status(500).json({ error: 'Error al obtener pedidos' });
-  }
-});
-
-// Cambia el estado de un pedido (lo usa el panel de administracion, nunca el cliente)
-app.patch('/api/pedidos/:id/estado', async (req, res) => {
-  const { id } = req.params;
-  const { estado } = req.body;
-
-  const estadosValidos = ['pendiente', 'preparando', 'en_camino', 'entregado'];
-  if (!estadosValidos.includes(estado)) {
-    return res.status(400).json({ error: 'Estado inválido' });
-  }
-
-  try {
-    const resultado = await pool.query(
-      `UPDATE pedidos SET estado = $1 WHERE id = $2 RETURNING *`,
-      [estado, id]
-    );
-    if (resultado.rows.length === 0) {
-      return res.status(404).json({ error: 'Pedido no encontrado' });
-    }
-    res.json(resultado.rows[0]);
-  } catch (error) {
-    console.error(error.message);
-    res.status(500).json({ error: 'Error al actualizar el estado del pedido' });
-  }
-});
-
-app.listen(PORT, () => {
-  console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });
