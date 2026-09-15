@@ -16,7 +16,7 @@ async function enviarEmailConfirmacion(pedido) {
     });
 
       await resend.emails.send({  
-      from: 'Pañalera Arcoiris <onboarding@resend.dev>',
+      from: 'Pañalera Arcoiris <pedidos@parcoiris.com.ar>',
       to: pedido.cliente_email,
       subject: `Confirmación de tu pedido - ${pedido.numero_seguimiento}`,
       html: `
