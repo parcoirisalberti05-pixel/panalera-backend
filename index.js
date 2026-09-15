@@ -398,8 +398,7 @@ app.post('/api/pedidos', async (req, res) => {
   }
 
   try {
-    const numero_seguimiento = 'ENV-' + Date.now();
-
+    const numero_seguimiento = 'P' + Date.now().toString(36).toUpperCase().slice(-6);
     const resultado = await pool.query(
       `INSERT INTO pedidos
         (cliente_nombre, cliente_telefono, cliente_email, direccion, localidad, codigo_postal, items, total, metodo_pago, estado, numero_seguimiento, fecha)
