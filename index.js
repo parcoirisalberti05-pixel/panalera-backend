@@ -474,3 +474,44 @@ app.post('/api/pedidos', async (req, res) => {
     client.release();
   }
 });
+// Lista todos los pedidos (para el panel de administracion y para "Mis Pedidos" del cliente)
+app.get('/api/pedidos', async (req, res) => {
+  try {
+    const resultado = await pool.query(
+      `SELECT * FROM pedidos ORDER BY fecha DESC`
+    );
+    res.json(resultado.rows);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: 'Error al obtener pedidos' });
+  }
+});
+
+// Cambia el estado de un pedido (lo usa el panel de administracion, nunca el cliente)
+app.patch('/api/pedidos/:id/estado', async (req, res) => {
+  const { id } = req.params;
+  const { estado } = req.body;
+
+  const estadosValidos = ['pendiente', 'preparando', 'en_camino', 'entregado'];
+  if (!estadosValidos.includes(estado)) {
+    return res.status(400).json({ error: 'Estado inválido' });
+  }
+
+  try {
+    const resultado = await pool.query(
+      `UPDATE pedidos SET estado = $1 WHERE id = $2 RETURNING *`,
+      [estado, id]
+    );
+    if (resultado.rows.length === 0) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+    res.json(resultado.rows[0]);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: 'Error al actualizar el estado del pedido' });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`Servidor corriendo en http://localhost:${PORT}`);
+});
