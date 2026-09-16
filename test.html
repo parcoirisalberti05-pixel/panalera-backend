@@ -66,8 +66,23 @@
   <pre id="ventaResultado"></pre>
 </div>
 
+<div class="bloque">
+  <h2>4) Crear preferencia de pago (Mercado Pago)</h2>
+  <label>Nombre del producto</label>
+  <input id="mpNombre" type="text" value="Producto de prueba">
+  <label>Cantidad</label>
+  <input id="mpCantidad" type="number" value="1">
+  <label>Precio unitario</label>
+  <input id="mpPrecio" type="number" value="1000">
+  <label>Email del cliente (opcional)</label>
+  <input id="mpEmail" type="text" placeholder="cliente@ejemplo.com">
+  <button onclick="crearPreferencia()">Crear preferencia</button>
+  <pre id="mpResultado"></pre>
+</div>
+
 <script>
 const BASE = 'http://localhost:3000';
+const BASE_PROD = 'https://panalera-backend-production.up.railway.app';
 
 async function verStock() {
   const id = document.getElementById('stockId').value;
@@ -107,6 +122,24 @@ async function registrarVenta() {
   });
   const data = await res.json();
   document.getElementById('ventaResultado').textContent = `Status: ${res.status}\n` + JSON.stringify(data, null, 2);
+}
+
+async function crearPreferencia() {
+  const body = {
+    items: [{
+      nombre: document.getElementById('mpNombre').value,
+      cantidad: Number(document.getElementById('mpCantidad').value),
+      precio: Number(document.getElementById('mpPrecio').value)
+    }],
+    cliente_email: document.getElementById('mpEmail').value || null
+  };
+  const res = await fetch(`${BASE_PROD}/api/crear-preferencia`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  document.getElementById('mpResultado').textContent = `Status: ${res.status}\n` + JSON.stringify(data, null, 2);
 }
 </script>
 
