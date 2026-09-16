@@ -4,6 +4,11 @@ require('dotenv').config();
 const pool = require('./db');
 const { Resend } = require('resend');
 const resend = new Resend(process.env.RESEND_API_KEY);
+const { MercadoPagoConfig, Preference } = require('mercadopago');
+
+const mercadopago = new MercadoPagoConfig({
+  accessToken: process.env.MP_ACCESS_TOKEN_TEST
+});
 
 async function enviarEmailConfirmacion(pedido) {
   try {
