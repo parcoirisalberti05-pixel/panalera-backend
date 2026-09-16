@@ -517,6 +517,48 @@ app.patch('/api/pedidos/:id/estado', async (req, res) => {
   }
 });
 
+// Crea una preferencia de pago en Mercado Pago (checkout con tarjeta)
+app.post('/api/crear-preferencia', async (req, res) => {
+  const { items, cliente_email } = req.body;
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'Faltan items para crear la preferencia' });
+  }
+
+  try {
+    const preferenceItems = items.map(item => ({
+      title: item.nombre,
+      quantity: Number(item.cantidad),
+      unit_price: Number(item.precio),
+      currency_id: 'ARS'
+    }));
+
+    const preference = new Preference(mercadopago);
+
+    const resultado = await preference.create({
+      body: {
+        items: preferenceItems,
+        payer: cliente_email ? { email: cliente_email } : undefined,
+        back_urls: {
+          success: 'https://parcoiris.com.ar',
+          failure: 'https://parcoiris.com.ar',
+          pending: 'https://parcoiris.com.ar'
+        },
+        auto_return: 'approved'
+      }
+    });
+
+    res.status(201).json({
+      preference_id: resultado.id,
+      init_point: resultado.init_point,
+      sandbox_init_point: resultado.sandbox_init_point
+    });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: 'Error al crear la preferencia de pago' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });
