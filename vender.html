@@ -258,7 +258,7 @@ async function cargarHistorial() {
     let clasePar = true;
 
     historialBody.innerHTML = ventas.map(v => {
-      const hora = new Date(v.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false });
+      const hora = new Date(v.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' });
       const pago = nombresMetodoPago[v.metodo_pago] || '—';
       const notaIcono = v.nota ? ` 📝` : '';
       const tituloNota = v.nota ? ` title="${v.nota.replace(/"/g, '&quot;')}"` : '';
