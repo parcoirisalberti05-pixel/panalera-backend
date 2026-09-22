@@ -559,6 +559,59 @@ app.post('/api/crear-preferencia', async (req, res) => {
   }
 });
 
+// Dirección fija del local
+const ORIGEN_DIRECCION = 'Hipólito Irigoyen 520, Manuel Alberti, Pilar, Buenos Aires, Argentina';
+
+async function calcularDistanciaKm(direccionDestino) {
+  const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(ORIGEN_DIRECCION)}&destinations=${encodeURIComponent(direccionDestino)}&units=metric&key=${process.env.GOOGLE_MAPS_API_KEY}`;
+  const res = await fetch(url);
+  const data = await res.json();
+
+  if (data.status !== 'OK') {
+    throw new Error('Error al calcular la distancia');
+  }
+  const elemento = data.rows[0]?.elements[0];
+  if (!elemento || elemento.status !== 'OK') {
+    throw new Error('No se pudo encontrar esa dirección o no hay ruta disponible');
+  }
+  return elemento.distance.value / 1000; // metros a km
+}
+
+function calcularCostoEnvio(distanciaKm, montoCompra) {
+  if (distanciaKm <= 5) {
+    return montoCompra >= 50000 ? { costo: 0, mensaje: 'Envío gratis' } : { costo: 2000, mensaje: null };
+  }
+  if (distanciaKm <= 10) {
+    return montoCompra >= 70000 ? { costo: 0, mensaje: 'Envío gratis' } : { costo: 4000, mensaje: null };
+  }
+  if (distanciaKm <= 15) {
+    return montoCompra >= 110000 ? { costo: 0, mensaje: 'Envío gratis' } : { costo: 6000, mensaje: null };
+  }
+  if (distanciaKm <= 25) {
+    return montoCompra >= 180000 ? { costo: 0, mensaje: 'Envío gratis' } : { costo: 12000, mensaje: null };
+  }
+  return { costo: null, mensaje: 'Envío a cotizar por WhatsApp' };
+}
+
+app.post('/api/calcular-envio', async (req, res) => {
+  const { direccion, montoCompra } = req.body;
+  if (!direccion) {
+    return res.status(400).json({ error: 'Falta la dirección' });
+  }
+  try {
+    const distanciaKm = await calcularDistanciaKm(direccion);
+    const resultado = calcularCostoEnvio(distanciaKm, Number(montoCompra) || 0);
+    res.json({
+      distancia_km: Math.round(distanciaKm * 10) / 10,
+      costo_envio: resultado.costo,
+      mensaje: resultado.mensaje
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ error: 'No se pudo calcular el envío. Revisá la dirección ingresada.' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });
