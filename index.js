@@ -566,15 +566,16 @@ async function calcularDistanciaKm(direccionDestino) {
   const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(ORIGEN_DIRECCION)}&destinations=${encodeURIComponent(direccionDestino)}&units=metric&key=${process.env.GOOGLE_MAPS_API_KEY}`;
   const res = await fetch(url);
   const data = await res.json();
+  console.log('Respuesta de Google:', JSON.stringify(data));
 
   if (data.status !== 'OK') {
-    throw new Error('Error al calcular la distancia');
+    throw new Error('Error al calcular la distancia: ' + data.status + ' - ' + (data.error_message || ''));
   }
   const elemento = data.rows[0]?.elements[0];
   if (!elemento || elemento.status !== 'OK') {
-    throw new Error('No se pudo encontrar esa dirección o no hay ruta disponible');
+    throw new Error('No se pudo encontrar esa dirección o no hay ruta disponible: ' + (elemento?.status || 'sin datos'));
   }
-  return elemento.distance.value / 1000; // metros a km
+  return elemento.distance.value / 1000;
 }
 
 function calcularCostoEnvio(distanciaKm, montoCompra) {
