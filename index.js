@@ -501,7 +501,11 @@ app.patch('/api/pedidos/:id/estado', async (req, res) => {
   if (!estadosValidos.includes(estado)) {
     return res.status(400).json({ error: 'Estado inválido' });
   }
-
+const claveRecibida = req.headers['x-admin-key'];
+  if (claveRecibida !== process.env.PEDIDOS_ADMIN_KEY) {
+    return res.status(401).json({ error: 'No autorizado' });
+  }
+  
   try {
     const resultado = await pool.query(
       `UPDATE pedidos SET estado = $1 WHERE id = $2 RETURNING *`,
