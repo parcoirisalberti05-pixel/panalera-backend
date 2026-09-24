@@ -189,7 +189,9 @@ async function cargarPedidos() {
   const lista = document.getElementById('lista');
   lista.innerHTML = '<div class="cargando">Cargando pedidos...</div>';
   try {
-    const res = await fetch(API_URL);
+    const res = await fetch(API_URL, {
+  headers: { 'x-admin-key': '7ced52f3d2eeb42509c145fb716dfde7453c03746e2f9482' }
+});
     if (!res.ok) throw new Error('Error al traer pedidos');
     pedidosGlobal = await res.json();
     renderizar();
