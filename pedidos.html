@@ -273,10 +273,13 @@ function renderizar() {
       e.target.disabled = true;
       try {
         const res = await fetch(`${API_URL}/${id}/estado`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ estado: nuevoEstado })
-        });
+  method: 'PATCH',
+  headers: {
+    'Content-Type': 'application/json',
+    'x-admin-key': '7ced52f3d2eeb42509c145fb716dfde7453c03746e2f9482'
+  },
+  body: JSON.stringify({ estado: nuevoEstado })
+});
         if (!res.ok) throw new Error('No se pudo actualizar');
         await cargarPedidos();
       } catch (err) {
