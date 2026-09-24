@@ -517,6 +517,24 @@ app.patch('/api/pedidos/:id/estado', async (req, res) => {
   }
 });
 
+// Consulta el estado actual de UN pedido por su número de seguimiento (lo usa "Mis Pedidos" del cliente)
+app.get('/api/pedidos/tracking/:numero', async (req, res) => {
+  const { numero } = req.params;
+  try {
+    const resultado = await pool.query(
+      `SELECT id, estado, numero_seguimiento, fecha, total FROM pedidos WHERE numero_seguimiento = $1`,
+      [numero]
+    );
+    if (resultado.rows.length === 0) {
+      return res.status(404).json({ error: 'Pedido no encontrado' });
+    }
+    res.json(resultado.rows[0]);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: 'Error al consultar el pedido' });
+  }
+});
+
 // Crea una preferencia de pago en Mercado Pago (checkout con tarjeta)
 app.post('/api/crear-preferencia', async (req, res) => {
   const { items, cliente_email } = req.body;
