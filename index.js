@@ -479,8 +479,12 @@ app.post('/api/pedidos', async (req, res) => {
     client.release();
   }
 });
-// Lista todos los pedidos (para el panel de administracion y para "Mis Pedidos" del cliente)
+// Lista todos los pedidos (solo para el panel de administracion, requiere clave)
 app.get('/api/pedidos', async (req, res) => {
+  const claveRecibida = req.headers['x-admin-key'];
+  if (claveRecibida !== process.env.PEDIDOS_ADMIN_KEY) {
+    return res.status(401).json({ error: 'No autorizado' });
+  }
   try {
     const resultado = await pool.query(
       `SELECT * FROM pedidos ORDER BY fecha DESC`
