@@ -530,7 +530,7 @@ app.get('/api/pedidos/tracking/:numero', async (req, res) => {
   const { numero } = req.params;
   try {
     const resultado = await pool.query(
-      `SELECT id, estado, numero_seguimiento, fecha, total FROM pedidos WHERE numero_seguimiento = $1`,
+      `SELECT * FROM pedidos WHERE numero_seguimiento = $1`
       [numero]
     );
     if (resultado.rows.length === 0) {
