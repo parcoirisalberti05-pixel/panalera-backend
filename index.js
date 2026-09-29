@@ -408,6 +408,7 @@ app.post('/api/pedidos', async (req, res) => {
 
     // 1. Para cada item del carrito, traducir id_web -> producto_id real,
     //    bloquear la fila del producto, chequear stock y descontar.
+    let montoProductos = 0;
     for (const item of items) {
       const idWeb = item.id;
       const cantidad = Number(item.cantidad);
@@ -427,7 +428,9 @@ app.post('/api/pedidos', async (req, res) => {
       }
 
       const productoId = pwResult.rows[0].producto_id;
-
+      const precioReal = Number(pwResult.rows[0].precio);
+      montoProductos += precioReal * cantidad;
+      
       const stockResult = await client.query(
         `SELECT COALESCE(SUM(
            CASE WHEN tipo = 'venta' THEN -cantidad ELSE cantidad END
@@ -451,7 +454,23 @@ app.post('/api/pedidos', async (req, res) => {
         [productoId, cantidad, `Pedido web - ${item.nombre}`]
       );
     }
-
+let costoEnvioReal = 0;
+if (direccion !== 'Retiro en el local') {
+  try {
+    const distanciaKm = await calcularDistanciaKm(`${direccion}, ${localidad}, Argentina`);
+    const resultadoEnvio = calcularCostoEnvio(distanciaKm, montoProductos);
+    if (resultadoEnvio.costo === null) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Para tu zona el envío se cotiza por WhatsApp. Contactanos antes de confirmar.' });
+    }
+    costoEnvioReal = resultadoEnvio.costo;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    return res.status(400).json({ error: 'No se pudo verificar el costo de envío. Verificá la dirección.' });
+  }
+}
+const totalReal = montoProductos + costoEnvioReal;
+    
     // 2. Ya descontado el stock de todos los items, crear el pedido.
     const numero_seguimiento = 'P' + Date.now().toString(36).toUpperCase().slice(-6);
     const resultado = await client.query(
@@ -459,7 +478,7 @@ app.post('/api/pedidos', async (req, res) => {
         (cliente_nombre, cliente_telefono, cliente_email, direccion, localidad, codigo_postal, items, total, metodo_pago, estado, numero_seguimiento, fecha)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pendiente', $10, NOW())
        RETURNING *`,
-      [cliente_nombre, cliente_telefono || null, cliente_email || null, direccion, localidad || null, codigo_postal || null, JSON.stringify(items), total, metodo_pago || null, numero_seguimiento]
+      [cliente_nombre, cliente_telefono || null, cliente_email || null, direccion, localidad || null, codigo_postal || null, JSON.stringify(items), totalReal, metodo_pago || null, numero_seguimiento]
     );
 
     await client.query('COMMIT');
