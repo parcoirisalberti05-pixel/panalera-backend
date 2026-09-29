@@ -413,13 +413,13 @@ app.post('/api/pedidos', async (req, res) => {
       const cantidad = Number(item.cantidad);
 
       const pwResult = await client.query(
-        `SELECT pw.producto_id
-         FROM productos_web pw
-         JOIN productos p ON p.id = pw.producto_id
-         WHERE pw.id_web = $1
-         FOR UPDATE OF p`,
-        [idWeb]
-      );
+  `SELECT pw.producto_id, p.precio
+   FROM productos_web pw
+   JOIN productos p ON p.id = pw.producto_id
+   WHERE pw.id_web = $1
+   FOR UPDATE OF p`,
+  [idWeb]
+);
 
       if (pwResult.rows.length === 0) {
         await client.query('ROLLBACK');
