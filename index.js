@@ -625,20 +625,23 @@ async function calcularDistanciaKm(direccionDestino) {
 
 function calcularCostoEnvio(distanciaKm, montoCompra) {
   if (distanciaKm <= 5) {
-    return montoCompra >= 50000 ? { costo: 0, mensaje: 'Envío gratis' } : { costo: 2000, mensaje: null };
+    if (montoCompra >= 50000) return { costo: 0, mensaje: 'Envío gratis' };
+    return { costo: 2000, mensaje: null, falta_para_gratis: 50000 - montoCompra };
   }
   if (distanciaKm <= 10) {
-    return montoCompra >= 70000 ? { costo: 0, mensaje: 'Envío gratis' } : { costo: 4000, mensaje: null };
+    if (montoCompra >= 70000) return { costo: 0, mensaje: 'Envío gratis' };
+    return { costo: 4000, mensaje: null, falta_para_gratis: 70000 - montoCompra };
   }
   if (distanciaKm <= 15) {
-    return montoCompra >= 110000 ? { costo: 0, mensaje: 'Envío gratis' } : { costo: 6000, mensaje: null };
+    if (montoCompra >= 110000) return { costo: 0, mensaje: 'Envío gratis' };
+    return { costo: 6000, mensaje: null, falta_para_gratis: 110000 - montoCompra };
   }
   if (distanciaKm <= 25) {
-    return montoCompra >= 180000 ? { costo: 0, mensaje: 'Envío gratis' } : { costo: 12000, mensaje: null };
+    if (montoCompra >= 180000) return { costo: 0, mensaje: 'Envío gratis' };
+    return { costo: 12000, mensaje: null, falta_para_gratis: 180000 - montoCompra };
   }
   return { costo: null, mensaje: 'Envío a cotizar por WhatsApp' };
 }
-
 app.post('/api/calcular-envio', async (req, res) => {
   const { direccion, montoCompra } = req.body;
   if (!direccion) {
@@ -650,7 +653,8 @@ app.post('/api/calcular-envio', async (req, res) => {
     res.json({
       distancia_km: Math.round(distanciaKm * 10) / 10,
       costo_envio: resultado.costo,
-      mensaje: resultado.mensaje
+      mensaje: resultado.mensaje,
+      falta_para_gratis: resultado.falta_para_gratis || null
     });
   } catch (err) {
     console.error(err);
