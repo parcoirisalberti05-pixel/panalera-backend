@@ -68,7 +68,9 @@ app.get('/api/productos', async (req, res) => {
     const params = [];
 
     if (buscar) {
-      query += ` WHERE p.nombre ILIKE $1 OR p.codigo_barras = $2 `;
+      query += ` WHERE p.nombre ILIKE $1 OR p.codigo_barras = $2
+                 OR EXISTS (SELECT 1 FROM productos_codigos pc
+                            WHERE pc.producto_id = p.id AND pc.codigo_barras = $2) `;
       params.push(`%${buscar}%`, buscar);
     }
 
