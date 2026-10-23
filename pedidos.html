@@ -175,6 +175,25 @@
 
 <script>
 const API_URL = 'https://panalera-backend-production.up.railway.app/api/pedidos';
+const CLAVE_STORAGE = 'pedidos_admin_key';
+
+// La clave NO está escrita en este archivo (el repositorio es público).
+// Se pide una vez y se guarda solo en este navegador.
+function obtenerClave() {
+  let clave = null;
+  try { clave = localStorage.getItem(CLAVE_STORAGE); } catch (e) {}
+  if (!clave) {
+    clave = prompt('Ingresá la clave de administrador para ver los pedidos:');
+    if (!clave) return null;
+    clave = clave.trim();
+    try { localStorage.setItem(CLAVE_STORAGE, clave); } catch (e) {}
+  }
+  return clave;
+}
+
+function olvidarClave() {
+  try { localStorage.removeItem(CLAVE_STORAGE); } catch (e) {}
+}
 let pedidosGlobal = [];
 let filtroActual = 'todos';
 
@@ -189,9 +208,19 @@ async function cargarPedidos() {
   const lista = document.getElementById('lista');
   lista.innerHTML = '<div class="cargando">Cargando pedidos...</div>';
   try {
+    const clave = obtenerClave();
+    if (!clave) {
+      lista.innerHTML = '<div class="vacio">Hace falta la clave de administrador. Tocá Refrescar para ingresarla.</div>';
+      return;
+    }
     const res = await fetch(API_URL, {
-  headers: { 'x-admin-key': '7ced52f3d2eeb42509c145fb716dfde7453c03746e2f9482' }
-});
+      headers: { 'x-admin-key': clave }
+    });
+    if (res.status === 401 || res.status === 403) {
+      olvidarClave();
+      lista.innerHTML = '<div class="vacio">Clave incorrecta. Tocá Refrescar para ingresarla de nuevo.</div>';
+      return;
+    }
     if (!res.ok) throw new Error('Error al traer pedidos');
     pedidosGlobal = await res.json();
     renderizar();
@@ -272,14 +301,20 @@ function renderizar() {
       const nuevoEstado = e.target.value;
       e.target.disabled = true;
       try {
+        const clave = obtenerClave();
+        if (!clave) throw new Error('Falta la clave');
         const res = await fetch(`${API_URL}/${id}/estado`, {
-  method: 'PATCH',
-  headers: {
-    'Content-Type': 'application/json',
-    'x-admin-key': '7ced52f3d2eeb42509c145fb716dfde7453c03746e2f9482'
-  },
-  body: JSON.stringify({ estado: nuevoEstado })
-});
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-key': clave
+          },
+          body: JSON.stringify({ estado: nuevoEstado })
+        });
+        if (res.status === 401 || res.status === 403) {
+          olvidarClave();
+          throw new Error('Clave incorrecta');
+        }
         if (!res.ok) throw new Error('No se pudo actualizar');
         await cargarPedidos();
       } catch (err) {
