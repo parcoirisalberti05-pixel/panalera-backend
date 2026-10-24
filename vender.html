@@ -1,6 +1,69 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+<script>
+// --- Clave de administrador para las pantallas internas ---
+// Agrega la clave (x-admin-key) a los pedidos al backend. La clave NO está escrita acá:
+// se pide una sola vez cuando el backend la reclama y queda guardada en este navegador.
+(function () {
+  var CLAVE_STORAGE = 'pedidos_admin_key';
+  var HOSTS_BACKEND = ['panalera-backend-production.up.railway.app'];
+  var fetchOriginal = window.fetch.bind(window);
+
+  function leerClave() {
+    try { return localStorage.getItem(CLAVE_STORAGE); } catch (e) { return null; }
+  }
+  function guardarClave(c) {
+    try { localStorage.setItem(CLAVE_STORAGE, c); } catch (e) {}
+  }
+  function olvidarClave() {
+    try { localStorage.removeItem(CLAVE_STORAGE); } catch (e) {}
+  }
+  function esApiPropia(url) {
+    try {
+      var u = new URL(url, window.location.href);
+      if (u.pathname.indexOf('/api/') !== 0) return false;
+      return u.origin === window.location.origin ||
+             HOSTS_BACKEND.indexOf(u.hostname) !== -1 ||
+             u.hostname === 'localhost';
+    } catch (e) { return false; }
+  }
+  function conClave(init, clave) {
+    var nuevo = Object.assign({}, init || {});
+    var headers = new Headers(nuevo.headers || {});
+    if (clave) headers.set('x-admin-key', clave);
+    nuevo.headers = headers;
+    return nuevo;
+  }
+
+  window.fetch = async function (input, init) {
+    var url = typeof input === 'string' ? input : (input instanceof URL ? input.href : null);
+    if (!url || !esApiPropia(url)) return fetchOriginal(input, init);
+
+    var clave = leerClave();
+    var resp = await fetchOriginal(input, conClave(init, clave));
+    if (resp.status !== 401) return resp;
+
+    // El backend rechazó: pedir la clave y reintentar una sola vez
+    // (un 401 significa que no se hizo nada, así que reintentar es seguro).
+    olvidarClave();
+    var texto = clave
+      ? 'La clave guardada no es correcta. Ingresá la clave de administrador:'
+      : 'Ingresá la clave de administrador:';
+    var nueva = window.prompt(texto);
+    if (!nueva) return resp;
+    nueva = nueva.trim();
+    resp = await fetchOriginal(input, conClave(init, nueva));
+    if (resp.status === 401) {
+      alert('Clave incorrecta. Volvé a intentar.');
+    } else {
+      guardarClave(nueva);
+    }
+    return resp;
+  };
+})();
+</script>
+
 <meta charset="UTF-8">
 <title>Vender - Pañalera Arcoiris</title>
 <style>
