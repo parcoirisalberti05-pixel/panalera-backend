@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
+const crypto = require('crypto');
 const pool = require('./db');
 const { Resend } = require('resend');
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -48,6 +49,22 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
+
+// Protege las rutas de administración con la clave PEDIDOS_ADMIN_KEY (header x-admin-key).
+// Si la variable no está configurada en el servidor, rechaza todo (nunca deja pasar).
+function requireAdmin(req, res, next) {
+  const esperada = process.env.PEDIDOS_ADMIN_KEY;
+  const recibida = req.headers['x-admin-key'];
+  if (!esperada || !recibida) {
+    return res.status(401).json({ error: 'No autorizado' });
+  }
+  const a = Buffer.from(String(recibida));
+  const b = Buffer.from(String(esperada));
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    return res.status(401).json({ error: 'No autorizado' });
+  }
+  next();
+}
 
 app.get('/', (req, res) => {
   res.send('Backend de Pañalera Arcoiris funcionando');
@@ -191,7 +208,7 @@ app.get('/api/stock', async (req, res) => {
 });
 
 // Crea un producto nuevo
-app.post('/api/productos', async (req, res) => {
+app.post('/api/productos', requireAdmin, async (req, res) => {
   const { nombre, codigo_barras, precio, marca_id, categoria_id } = req.body;
 
   if (!nombre || !precio) {
@@ -214,7 +231,7 @@ app.post('/api/productos', async (req, res) => {
 // Actualizar precio de un producto: si pertenece a una línea (marca_id + linea_id),
 // actualiza todos los talles hermanos al mismo precio, excepto Talle P y Talle RN
 // que siempre manejan precio propio.
-app.patch('/api/productos/:id/precio', async (req, res) => {
+app.patch('/api/productos/:id/precio', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { precio } = req.body;
 
@@ -262,7 +279,7 @@ app.patch('/api/productos/:id/precio', async (req, res) => {
 });
 
 // Historial de ventas de las últimas 24 horas
-app.get('/api/movimientos/hoy', async (req, res) => {
+app.get('/api/movimientos/hoy', requireAdmin, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT m.id, m.cantidad, m.fecha, m.metodo_pago, m.nota, m.venta_id, p.nombre, p.precio,
@@ -282,7 +299,7 @@ app.get('/api/movimientos/hoy', async (req, res) => {
 });
 
 // Actualiza el codigo de barras de un producto ya existente
-app.patch('/api/productos/:id/codigo-barras', async (req, res) => {
+app.patch('/api/productos/:id/codigo-barras', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { codigo_barras } = req.body;
 
@@ -306,7 +323,7 @@ app.patch('/api/productos/:id/codigo-barras', async (req, res) => {
 });
 
 // Registra una venta: descuenta stock de forma atómica, no permite stock negativo
-app.post('/api/ventas', async (req, res) => {
+app.post('/api/ventas', requireAdmin, async (req, res) => {
   const { producto_id, canal, cantidad, nota, metodo_pago, venta_id } = req.body;
 
   if (!producto_id || !canal || !cantidad || cantidad <= 0) {
@@ -361,7 +378,7 @@ app.post('/api/ventas', async (req, res) => {
 });
 
 // Registra ingreso, ajuste o devolución (suma o resta stock según el caso)
-app.post('/api/movimientos', async (req, res) => {
+app.post('/api/movimientos', requireAdmin, async (req, res) => {
   const { producto_id, canal, tipo, cantidad, nota } = req.body;
 
   if (!producto_id || !canal || !tipo || cantidad === undefined) {
@@ -402,6 +419,15 @@ app.post('/api/pedidos', async (req, res) => {
 
   if (!cliente_nombre || !direccion || !items || !total) {
     return res.status(400).json({ error: 'Faltan datos obligatorios del pedido' });
+  }
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'El pedido no tiene productos' });
+  }
+  for (const item of items) {
+    const cant = Number(item && item.cantidad);
+    if (!Number.isInteger(cant) || cant <= 0) {
+      return res.status(400).json({ error: 'Cantidad inválida en el pedido' });
+    }
   }
 
   const client = await pool.connect();
@@ -472,8 +498,8 @@ if (direccion !== 'Retiro en el local') {
   }
 }
 const totalReal = montoProductos + costoEnvioReal;
-    
-    // 2. Ya descontado el stock de todos los items, crear el pedido.
+
+// 2. Ya descontado el stock de todos los items, crear el pedido.
     const numero_seguimiento = 'P' + Date.now().toString(36).toUpperCase().slice(-6);
     const resultado = await client.query(
       `INSERT INTO pedidos
@@ -501,11 +527,7 @@ const totalReal = montoProductos + costoEnvioReal;
   }
 });
 // Lista todos los pedidos (solo para el panel de administracion, requiere clave)
-app.get('/api/pedidos', async (req, res) => {
-  const claveRecibida = req.headers['x-admin-key'];
-  if (claveRecibida !== process.env.PEDIDOS_ADMIN_KEY) {
-    return res.status(401).json({ error: 'No autorizado' });
-  }
+app.get('/api/pedidos', requireAdmin, async (req, res) => {
   try {
     const resultado = await pool.query(
       `SELECT * FROM pedidos ORDER BY fecha DESC`
@@ -518,7 +540,7 @@ app.get('/api/pedidos', async (req, res) => {
 });
 
 // Cambia el estado de un pedido (lo usa el panel de administracion, nunca el cliente)
-app.patch('/api/pedidos/:id/estado', async (req, res) => {
+app.patch('/api/pedidos/:id/estado', requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { estado } = req.body;
 
@@ -526,11 +548,7 @@ app.patch('/api/pedidos/:id/estado', async (req, res) => {
   if (!estadosValidos.includes(estado)) {
     return res.status(400).json({ error: 'Estado inválido' });
   }
-const claveRecibida = req.headers['x-admin-key'];
-  if (claveRecibida !== process.env.PEDIDOS_ADMIN_KEY) {
-    return res.status(401).json({ error: 'No autorizado' });
-  }
-  
+
   try {
     const resultado = await pool.query(
       `UPDATE pedidos SET estado = $1 WHERE id = $2 RETURNING *`,
