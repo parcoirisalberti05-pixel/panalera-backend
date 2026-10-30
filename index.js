@@ -163,6 +163,30 @@ app.get('/api/marcas', async (req, res) => {
   }
 });
 
+// Crea una marca nueva (si ya existe una igual, devuelve la existente)
+app.post('/api/marcas', requireAdmin, async (req, res) => {
+  const nombre = String((req.body && req.body.nombre) || '').trim().replace(/\s+/g, ' ');
+  if (!nombre) return res.status(400).json({ error: 'Falta el nombre de la marca' });
+  if (nombre.length > 60) return res.status(400).json({ error: 'El nombre es demasiado largo' });
+  try {
+    const existente = await pool.query(
+      'SELECT id, nombre FROM marcas WHERE LOWER(nombre) = LOWER($1) LIMIT 1',
+      [nombre]
+    );
+    if (existente.rows.length > 0) {
+      return res.json({ ...existente.rows[0], ya_existia: true });
+    }
+    const nueva = await pool.query(
+      'INSERT INTO marcas (nombre) VALUES ($1) RETURNING id, nombre',
+      [nombre]
+    );
+    res.status(201).json(nueva.rows[0]);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: 'Error al crear la marca' });
+  }
+});
+
 // Trae el stock de todos los productos, con filtros opcionales por categoria y marca
 app.get('/api/stock', async (req, res) => {
   const { categoria_id, marca_id } = req.query;
@@ -498,8 +522,8 @@ if (direccion !== 'Retiro en el local') {
   }
 }
 const totalReal = montoProductos + costoEnvioReal;
-
-// 2. Ya descontado el stock de todos los items, crear el pedido.
+    
+    // 2. Ya descontado el stock de todos los items, crear el pedido.
     const numero_seguimiento = 'P' + Date.now().toString(36).toUpperCase().slice(-6);
     const resultado = await client.query(
       `INSERT INTO pedidos
