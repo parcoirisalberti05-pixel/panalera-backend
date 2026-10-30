@@ -92,6 +92,7 @@ button:disabled{background:#aaa}
 <select id="marca">
 <option value="">Sin marca</option>
 </select>
+<button type="button" id="btnNuevaMarca" style="margin-top:6px; background:none; border:none; color:#1a56b0; text-decoration:underline; cursor:pointer; font-size:15px; padding:0;">+ Agregar marca nueva</button>
 
 <label for="categoria">Categoría</label>
 <select id="categoria">
@@ -103,6 +104,32 @@ button:disabled{background:#aaa}
 
 <script>
 const API = 'https://panalera-backend-production.up.railway.app';
+
+document.getElementById('btnNuevaMarca').addEventListener('click', async () => {
+  const nombre = (window.prompt('Nombre de la marca nueva:') || '').trim();
+  if (!nombre) return;
+  try {
+    const resp = await fetch(API + '/api/marcas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nombre })
+    });
+    const data = await resp.json();
+    if (!resp.ok) { alert(data.error || 'No se pudo crear la marca'); return; }
+    const select = document.getElementById('marca');
+    let opcion = Array.from(select.options).find(o => o.value === String(data.id));
+    if (!opcion) {
+      opcion = document.createElement('option');
+      opcion.value = data.id;
+      opcion.textContent = data.nombre;
+      select.appendChild(opcion);
+    }
+    select.value = String(data.id);
+    alert(data.ya_existia ? 'Esa marca ya existía, la dejé seleccionada.' : 'Marca "' + data.nombre + '" creada y seleccionada.');
+  } catch (e) {
+    alert('Error de conexión al crear la marca');
+  }
+});
 
 async function cargarDesplegables() {
   const respMarcas = await fetch(API + "/api/marcas");
